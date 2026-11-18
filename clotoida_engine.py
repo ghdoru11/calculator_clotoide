@@ -13,21 +13,12 @@ Principii:
 - fara numpy/pandas; foloseste numai biblioteca standard Python;
 - unghiurile publice sunt in grade centesimale [g], calculele interne in radiani;
 - separa formulele confirmate de procedurile speciale care necesita sursa/figura;
-- nu inventeaza o solutie completa pentru racordari ovoidale, in dusina sau bucle;
-- include verificari numerice pe geometria AX_FINAL (C1 si C3).
+
 
 Cazuri incluse:
 1. Clotoida-arc de cerc-clotoida (CLC), simetrica; calcul complet.
 2. Doua clotoide simetrice fara arc central (LL); calcul complet.
-3. Doua clotoide nesimetrice fara arc central; calcul geometric complet dupa
-   alegerea unuia dintre unghiurile de capat.
-4. Racordare in bolta intre aliniamente paralele; inventariata, blocata pana la
-   confirmarea schemei geometrice exacte.
-5. Racordare in dusina; inventariata, blocata pana la confirmarea schemei.
-6. Serpentina de categoria a II-a; modul geometric d1, d2, D1, D2 si unghiuri.
-7. Bucla; se poate calcula un arc individual de clotoida, nu intreaga bucla.
-8. Racordare ovoidala; raportul razelor si controlul datelor, fara geometria
-   completa a racordarii.
+3. Arc de cerc
 
 Comenzi rapide:
     python clotoida_engine_unificat.py selftest
@@ -384,8 +375,7 @@ def criterii_lungime_clotoida(
     sau ambele zecimale (0.06 si 0.01).
 
     Criteriul optic folosit este alfa0 >= 1/18 rad, de unde L >= R/9.
-    Formula este preluata din revizia documentului tehnic (2026-11-16); verificati
-    aplicabilitatea normativului pentru cazul proiectat.
+    
     Formula sqrt(12R) nu este implementata.
     """
     R_m = _positive("R_m", R_m)
@@ -496,7 +486,7 @@ def tabel_arc_cerc_simplu(
 
     mod_arc='jumatate':
       Ti -> B; beta_max=delta/2, phi_max=delta/4.
-      Aceasta este forma uzuala din tabelul-model, cealalta jumatate fiind simetrica.
+      Aceasta este forma uzuala din tabelul model, cealalta jumatate fiind simetrica.
 
     mod_arc='complet':
       Ti -> Te; beta_max=delta, phi_max=delta/2.
@@ -1337,7 +1327,7 @@ finally {
     return output
 
 # ---------------------------------------------------------------------------
-# Autoteste
+# Selftest
 # ---------------------------------------------------------------------------
 
 def _assert_close(actual: float, expected: float, tol: float, label: str) -> None:
@@ -1802,7 +1792,7 @@ def _add_common_table_args(parser: argparse.ArgumentParser) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Elemente din Anexele 1/2: consultare numerica, fara extragere grafica
+# Elemente din Anexele 1/2: consultare numerica- tbd
 # ---------------------------------------------------------------------------
 
 def elemente_anexe(

@@ -11,6 +11,7 @@ from dataclasses import asdict
 import streamlit as st
 
 import clotoida_engine as engine
+from table_views import render_html
 
 
 def dataframe(rows: list[dict]) -> None:
@@ -18,6 +19,16 @@ def dataframe(rows: list[dict]) -> None:
 
 
 def as_rows(values: dict) -> list[dict]:
+    # Notațiile din manual sunt folosite în interfață; cheile interne/JSON rămân compatibile.
+    etichete = {
+        "delta_g": "αc — unghi total la centru (g)",
+        "delta_total_g": "αc — unghi total la centru (g)",
+        "delta_arc_central_g": "α′c — unghiul arcului intermediar (g)",
+        "p_m": "ΔR — strămutarea cercului (m)",
+        "delta_m": "ΔR — strămutarea cercului (m)",
+        "delta1": "δ₁ — strămutare, clotoidă de bază",
+    }
+
     def fmt(value):
         if value is None:
             return "—"
@@ -27,7 +38,7 @@ def as_rows(values: dict) -> list[dict]:
             return f"{value:.9f}" if math.isfinite(value) else str(value)
         return str(value)
 
-    return [{"Element": key, "Valoare": fmt(value)} for key, value in values.items()]
+    return [{"Element": etichete.get(key, key), "Valoare": fmt(value)} for key, value in values.items()]
 
 
 def csv_table_bytes(rows: list[dict]) -> bytes:
@@ -70,7 +81,7 @@ with st.form("parameters"):
         L = None
     if mode in {"Arc de cerc", "CLC"}:
         with c3:
-            delta = st.number_input("Unghiul la centru Δ (g)", min_value=0.001, max_value=199.999, value=118.93055, format="%.6f")
+            delta = st.number_input("Unghiul total la centru αc (g)", min_value=0.001, max_value=199.999, value=118.93055, format="%.6f")
     else:
         delta = None
     if mode == "CC simetrică":
@@ -158,7 +169,7 @@ if result is not None:
     st.subheader("Tabele de trasare")
     for title, rows in tables.items():
         with st.expander(title.replace("_", " "), expanded=True):
-            dataframe(rows)
+            st.markdown(render_html(title, rows, saved_mode), unsafe_allow_html=True)
 
     st.download_button(
         "Descarcă rezultate (ZIP: JSON + CSV)",

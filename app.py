@@ -51,13 +51,24 @@ def csv_table_bytes(rows: list[dict]) -> bytes:
     return ("\ufeff" + buf.getvalue()).encode("utf-8")
 
 
-def as_archive(summary: dict, tables: dict[str, list[dict]]) -> bytes:
+def as_archive(summary: dict, tables: dict[str, list[dict]], mode: str) -> bytes:
     raw = io.BytesIO()
     with zipfile.ZipFile(raw, mode="w", compression=zipfile.ZIP_DEFLATED) as z:
         z.writestr("rezultate.json", json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+        z.writestr("tabele_trasare_formatate.html", html_document(tables, mode))
         for name, rows in tables.items():
             z.writestr(f"{name}.csv", csv_table_bytes(rows))
     return raw.getvalue()
+
+
+def html_document(tables: dict[str, list[dict]], mode: str) -> str:
+    body = "".join(render_html(name, rows, mode) for name, rows in tables.items())
+    return (
+        '<!DOCTYPE html><html lang="ro"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<title>Tabele de trasare</title></head><body>'
+        + body + '</body></html>'
+    )
 
 
 st.set_page_config(page_title="Calculator curbe rutiere", page_icon="📐", layout="wide")
@@ -66,7 +77,7 @@ st.caption("Motor analitic v1.4 · Unghiuri în grade centesimale (g) · Lungimi
 
 mode = st.radio(
     "Tipul racordării",
-    ["Arc de cerc", "Clotoidă", "CLC", "CC simetrică"],
+    ["Arc de cerc", "Clotoidă", "CLC"],
     horizontal=True,
 )
 
@@ -84,18 +95,8 @@ with st.form("parameters"):
             delta = st.number_input("Unghiul total la centru αc (g)", min_value=0.001, max_value=199.999, value=118.93055, format="%.6f")
     else:
         delta = None
-    if mode == "CC simetrică":
-        with c3:
-            U = st.number_input("Unghiul la vârf U (g)", min_value=0.001, max_value=199.999, value=80.0, format="%.5f")
-    else:
-        U = None
     with c1:
         n = st.number_input("Numărul de intervale de trasare", min_value=1, max_value=500, value=10, step=1)
-    if mode in {"Arc de cerc", "CLC"}:
-        with c2:
-            sens = st.selectbox("Sensul curbei", ["stanga", "dreapta"], format_func=lambda v: "Stânga" if v == "stanga" else "Dreapta")
-    else:
-        sens = "stanga"
     submit = st.form_submit_button("Calculează", use_container_width=True)
 
 if submit:
@@ -112,9 +113,8 @@ if submit:
                 "bisectoare_B_m": R * (1 / math.cos(rad / 2) - 1),
                 "coarda_m": 2 * R * math.sin(rad / 2),
                 "lungime_arc_C_m": R * rad,
-                "sens": sens,
             }
-            tables["arc_cerc"] = [asdict(p) for p in engine.tabel_arc_cerc_simplu(R, delta, n, "complet", sens)]
+            tables["arc_cerc"] = [asdict(p) for p in engine.tabel_arc_cerc_simplu(R, delta, n, "complet")]
 
         elif mode == "Clotoidă":
             assert L is not None
@@ -127,15 +127,7 @@ if submit:
             summary = engine.elemente_anexe(R_m=R, L_m=L, delta_g=delta)
             summary["geometrie_CLC"] = {k: v for k, v in main.items() if k != "tabel_clotoida"}
             tables["clotoida_intrare"] = [asdict(p) for p in engine.tabel_trasare(R, L, n)]
-            tables["arc_central_Oi_0_0"] = [asdict(p) for p in engine.tabel_arc_central_clc(R, L, delta, n, sens)]
-
-        else:  # CC simetrică
-            assert U is not None
-            cc = engine.caz2_ll_simetrica(U, R, n=n)
-            Lcc = cc["L_fiecare_m"]
-            summary = engine.elemente_anexe(R_m=R, L_m=Lcc)
-            summary["geometrie_CC"] = {k: v for k, v in cc.items() if k != "tabel_clotoida"}
-            tables["clotoida_CC"] = [asdict(p) for p in engine.tabel_trasare(R, Lcc, n)]
+            tables["arc_central_Oi_0_0"] = [asdict(p) for p in engine.tabel_arc_central_clc(R, L, delta, n)]
 
         st.session_state["result"] = {"mode": mode, "summary": summary, "tables": tables}
 
@@ -156,9 +148,6 @@ if result is not None:
             st.info("Arcul central este raportat atât local la Si, cât și în sistemul Oi=(0,0), în continuarea clotoidei de intrare. Clotoida de ieșire este simetrică.")
             with st.expander("Racordare CLC", expanded=True):
                 dataframe(as_rows(summary["geometrie_CLC"]))
-        elif saved_mode == "CC simetrică":
-            with st.expander("Racordare CC", expanded=True):
-                dataframe(as_rows(summary["geometrie_CC"]))
         with st.expander("Clotoida reală", expanded=True):
             dataframe(as_rows(summary["clotoida_reala"]))
         with st.expander("Anexa I — clotoida de bază A=1", expanded=True):
@@ -172,8 +161,15 @@ if result is not None:
             st.markdown(render_html(title, rows, saved_mode), unsafe_allow_html=True)
 
     st.download_button(
-        "Descarcă rezultate (ZIP: JSON + CSV)",
-        data=as_archive(summary, tables),
+        "Descarcă tabelele formatate (HTML)",
+        data=html_document(tables, saved_mode).encode("utf-8"),
+        file_name="tabele_trasare_formatate.html",
+        mime="text/html",
+        use_container_width=True,
+    )
+    st.download_button(
+        "Descarcă rezultate (ZIP: HTML + JSON + CSV)",
+        data=as_archive(summary, tables, saved_mode),
         file_name="elemente_curbe.zip",
         mime="application/zip",
         use_container_width=True,

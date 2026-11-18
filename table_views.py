@@ -1,5 +1,4 @@
-"""Tabele de trasare cu antete tehnice grupate, după modelele CAD furnizate.
-
+"""Tabele de trasare cu antete tehnice grupate.
 Acest modul formatează doar vizual datele calculate; nu modifică geometria.
 """
 from __future__ import annotations

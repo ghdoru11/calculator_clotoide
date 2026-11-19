@@ -71,6 +71,21 @@ def html_document(tables: dict[str, list[dict]], mode: str) -> str:
     )
 
 
+def pozitii_automate_clotoida(R: float, L: float) -> list[float]:
+    pozitii = [L]
+    while pozitii[-1] > 0.0:
+        s = pozitii[-1]
+        urmator = max(0.0, s - R * L / (10.0 * s))
+        if urmator < L * 1e-12:
+            urmator = 0.0
+        if urmator >= s:
+            raise ArithmeticError("Nu se poate determina următorul punct de trasare.")
+        pozitii.append(urmator)
+        if len(pozitii) > 2000:
+            raise ValueError("Rezultă peste 2000 de puncte de trasare. Folosiți modul Manual.")
+    return list(reversed(pozitii))
+
+
 st.set_page_config(page_title="Calculator curbe rutiere", page_icon="📐", layout="wide")
 st.title("Calculator curbe rutiere")
 st.caption("Motor analitic v1.4 · Unghiuri în grade centesimale (g) · Lungimi în metri")
@@ -78,6 +93,12 @@ st.caption("Motor analitic v1.4 · Unghiuri în grade centesimale (g) · Lungimi
 mode = st.radio(
     "Tipul racordării",
     ["Arc de cerc", "Clotoidă", "CLC"],
+    horizontal=True,
+)
+
+mod_puncte = st.radio(
+    "Determinarea punctelor de trasare",
+    ["Automat", "Manual"],
     horizontal=True,
 )
 
@@ -95,8 +116,11 @@ with st.form("parameters"):
             delta = st.number_input("Unghiul total la centru αc (g)", min_value=0.001, max_value=199.999, value=118.93055, format="%.6f")
     else:
         delta = None
-    with c1:
-        n = st.number_input("Numărul de intervale de trasare", min_value=1, max_value=500, value=10, step=1)
+    if mod_puncte == "Manual":
+        with c1:
+            numar_puncte = int(st.number_input("Numărul de puncte (inclusiv capetele)", min_value=2, max_value=501, value=11, step=1))
+    else:
+        numar_puncte = None
     submit = st.form_submit_button("Calculează", use_container_width=True)
 
 if submit:
@@ -114,20 +138,29 @@ if submit:
                 "coarda_m": 2 * R * math.sin(rad / 2),
                 "lungime_arc_C_m": R * rad,
             }
-            tables["arc_cerc"] = [asdict(p) for p in engine.tabel_arc_cerc_simplu(R, delta, n, "complet")]
+            C = summary["lungime_arc_C_m"]
+            n_arc = numar_puncte - 1 if numar_puncte is not None else 2 * math.ceil(5.0 * C / R)
+            tables["arc_cerc"] = [asdict(p) for p in engine.tabel_arc_cerc_simplu(R, delta, n_arc, "complet")]
+            if n_arc % 2 == 0:
+                tables["arc_cerc"][n_arc // 2]["pichet"] = "B"
 
         elif mode == "Clotoidă":
             assert L is not None
             summary = engine.elemente_anexe(R_m=R, L_m=L)
-            tables["clotoida"] = [asdict(p) for p in engine.tabel_trasare(R, L, n)]
+            pozitii = pozitii_automate_clotoida(R, L) if numar_puncte is None else None
+            n_cl = len(pozitii) - 1 if pozitii is not None else numar_puncte - 1
+            tables["clotoida"] = [asdict(p) for p in engine.tabel_trasare(R, L, n_cl, distante_m=pozitii)]
 
         elif mode == "CLC":
             assert L is not None and delta is not None
-            main = engine.caz1_clc_simetrica(delta, R, L, n=n)
+            pozitii = pozitii_automate_clotoida(R, L) if numar_puncte is None else None
+            n_cl = len(pozitii) - 1 if pozitii is not None else numar_puncte - 1
+            main = engine.caz1_clc_simetrica(delta, R, L, n=n_cl)
+            n_arc = numar_puncte - 1 if numar_puncte is not None else math.ceil(10.0 * main["C_arc_central_m"] / R)
             summary = engine.elemente_anexe(R_m=R, L_m=L, delta_g=delta)
             summary["geometrie_CLC"] = {k: v for k, v in main.items() if k != "tabel_clotoida"}
-            tables["clotoida_intrare"] = [asdict(p) for p in engine.tabel_trasare(R, L, n)]
-            tables["arc_central_Oi_0_0"] = [asdict(p) for p in engine.tabel_arc_central_clc(R, L, delta, n)]
+            tables["clotoida_intrare"] = [asdict(p) for p in engine.tabel_trasare(R, L, n_cl, distante_m=pozitii)]
+            tables["arc_central_Oi_0_0"] = [asdict(p) for p in engine.tabel_arc_central_clc(R, L, delta, n_arc)]
 
         st.session_state["result"] = {"mode": mode, "summary": summary, "tables": tables}
 
@@ -157,7 +190,7 @@ if result is not None:
 
     st.subheader("Tabele de trasare")
     for title, rows in tables.items():
-        with st.expander(title.replace("_", " "), expanded=True):
+        with st.expander(f'{title.replace("_", " ")} ({len(rows)} puncte)', expanded=True):
             st.markdown(render_html(title, rows, saved_mode), unsafe_allow_html=True)
 
     st.download_button(
